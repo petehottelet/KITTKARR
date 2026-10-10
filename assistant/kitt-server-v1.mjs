@@ -384,8 +384,8 @@ export async function createKittServer({port=Number(process.env.KITT_PORT||4180)
     reminderBusy=true;
     try{const due=await reminders.claimDue();if(!due.length)return;const token=++generation;const text=`${persona.snapshot().addressAs}, ${due.map(r=>r.text).join('. ')}`;update({reply:text,heard:'',reminderAlert:due[0].id,links:due.filter(r=>r.sourceUrl).map(r=>({label:'Reminder source',url:r.sourceUrl}))});await speak(text,token)}catch(error){fail(error)}finally{reminderBusy=false}
   }
-  const publicFiles=new Map([['/assets/yautja-wordmark-v1.svg','assets/yautja-wordmark-v1.svg'],['/yautja','yautja-v1.html'],['/yautja-v1.js','yautja-v1.js'],['/yautja-v1.css','yautja-v1.css'],['/','device-v1.html'],['/device-v1.js','device-v1.js'],['/device-v1.css','device-v1.css'],['/styles.css','styles.css'],['/signal.js','signal.js'],['/assets/fonts/michroma.ttf','assets/fonts/michroma.ttf'],['/assets/icon.svg','assets/icon.svg']]);
-  const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.ttf':'font/ttf','.svg':'image/svg+xml'};
+  const publicFiles=new Map([['/assets/yautja-wordmark-v1.svg','assets/yautja-wordmark-v1.svg'],['/yautja','yautja-v1.html'],['/yautja-v1.js','yautja-v1.js'],['/yautja-v1.css','yautja-v1.css'],['/','device-v1.html'],['/device-v1.js','device-v1.js'],['/device-v1.css','device-v1.css'],['/styles.css','styles.css'],['/signal.js','signal.js'],['/assets/fonts/michroma.ttf','assets/fonts/michroma.ttf'],['/assets/icon.png','assets/icon.png']]);
+  const mime={'.png':'image/png','.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.ttf':'font/ttf','.svg':'image/svg+xml'};
   const json=(response,status,value)=>{response.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});response.end(JSON.stringify(value))};
   const server=http.createServer(async(request,response)=>{
     try{

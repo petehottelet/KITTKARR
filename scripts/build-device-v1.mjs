@@ -6,7 +6,7 @@ if (!panel) throw new Error('The KITT instrument could not be found.');
 const html = `<!doctype html>
 <!-- Device interface revision 4. Gray microphone waveform and a mesh thinking indicator. -->
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#070708">
-<title>K.I.T.T. — Car Thing</title><link rel="icon" href="assets/icon.svg"><link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="device-v1.css"><script src="signal.js" defer></script><script src="device-v1.js" defer></script></head>
+<title>K.I.T.T. — Car Thing</title><link rel="icon" href="assets/icon.png"><link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="device-v1.css"><script src="signal.js" defer></script><script src="device-v1.js" defer></script></head>
 <body class="device-view">
 <nav class="device-tools" aria-label="KITT mode"><button id="back-to-dashboard">Back</button><button id="details-toggle" aria-expanded="false">Details</button></nav>
 <main class="device-stage">

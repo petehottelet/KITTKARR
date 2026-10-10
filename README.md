@@ -1,4 +1,14 @@
-# KITTKARR
+<p align="left">
+  <picture>
+    <source media="(prefers-reduced-motion: reduce)" srcset="assets/branding/voicebox-still.png">
+    <img src="assets/branding/voicebox.gif" width="20%" align="middle" alt="Animated red LED voicebox">
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/branding/title-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="assets/branding/title-light.svg">
+    <img src="assets/branding/title-light.svg" width="78%" align="middle" alt="KITTKARR — Configurable Voice Agent Interface">
+  </picture>
+</p>
 
 A Knight Rider-inspired, audio-reactive agent voice interface for a Mac browser or a USB-connected Car Thing. Includes the LED voicebox visualizer, configurable speech and UI. Plugin any cloud or local voice service (e.g. voicebox or kokoro)
 

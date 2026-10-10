@@ -14,8 +14,8 @@ try { process.loadEnvFile(path.join(root, '.env')); } catch { /* No .env file. *
 const port = Number(process.env.PORT || 4173);
 // The local preview asks for a sign-in only when KITT_LOGIN_USERNAME and KITT_LOGIN_PASSWORD are set.
 const login = loginConfig();
-const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.ttf': 'font/ttf', '.mp3': 'audio/mpeg' };
-const publicFiles = new Set(['index.html', 'styles.css', 'app.js', 'signal.js', 'assets/icon.svg', 'assets/fonts/michroma.ttf']);
+const types = { '.png': 'image/png', '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.ttf': 'font/ttf', '.mp3': 'audio/mpeg' };
+const publicFiles = new Set(['index.html', 'styles.css', 'app.js', 'signal.js', 'assets/icon.png', 'assets/fonts/michroma.ttf']);
 const maxBodyBytes = 16 * 1024;
 
 function sendJson(response, status, value) {
