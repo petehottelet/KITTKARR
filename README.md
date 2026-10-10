@@ -1,4 +1,4 @@
-<p align="left">
+<p align="center">
   <picture>
     <source media="(prefers-reduced-motion: reduce)" srcset="assets/branding/voicebox-still.png">
     <img src="assets/branding/voicebox.gif" width="17%" align="middle" alt="Animated red LED voicebox">
@@ -6,7 +6,7 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/branding/title-dark.svg">
     <source media="(prefers-color-scheme: light)" srcset="assets/branding/title-light.svg">
-    <img src="assets/branding/title-light.svg" width="78%" align="middle" alt="KITTKARR — Configurable Voice Agent Interface">
+    <img src="assets/branding/title-light.svg" width="66.3%" align="middle" alt="KITTKARR — Configurable Voice Agent Interface">
   </picture>
 </p>
 
