@@ -1,6 +1,6 @@
 # KITTKARR
 
-A KITT-inspired, audio-reactive voice interface for a Mac browser or a USB-tethered Car Thing. Includes the LED voicebox, configurable speech, a device dashboard, and LCARS usage displays. The animated LCARS screensaver is not included.
+A Knight Rider-inspired, audio-reactive voice interface for a Mac browser or a USB-connected Car Thing. Includes the LED voicebox visualizer, configurable speech and UI. Plugin any cloud or local voice service (e.g. voicebox or kokoro)
 
 ## Start on a Mac
 
