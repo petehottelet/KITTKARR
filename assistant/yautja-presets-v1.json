@@ -1,0 +1,77 @@
+{
+  "revision": 5,
+  "presets": [
+    {
+      "id": "yautja",
+      "name": "Yautja",
+      "options": {
+        "look_preset": "yautja",
+        "thermal": "low-detail",
+        "sensor_resolution": 128,
+        "thermal_levels": 8,
+        "thermal_band_softness": 0.45,
+        "thermal_black_point": 0.25,
+        "thermal_white_point": 0.94,
+        "thermal_softness": 1.2,
+        "hud_theme": "custom",
+        "hud_colors": "leaders=#EF2525,markers=#EF2525,callouts=#EF2525"
+      }
+    },
+    {
+      "id": "fremont",
+      "name": "Fremont",
+      "options": {
+        "look_preset": "fremont"
+      }
+    },
+    {
+      "id": "murphy",
+      "name": "Murphy",
+      "options": {
+        "look_preset": "murphy"
+      }
+    },
+    {
+      "id": "netrunner",
+      "name": "Netrunner",
+      "options": {
+        "look_preset": "netrunner"
+      }
+    },
+    {
+      "id": "focus",
+      "name": "Focus",
+      "options": {
+        "look_preset": "focus"
+      }
+    },
+    {
+      "id": "relic",
+      "name": "Relic",
+      "options": {
+        "look_preset": "relic"
+      }
+    },
+    {
+      "id": "ripley",
+      "name": "Ripley",
+      "options": {
+        "look_preset": "ripley"
+      }
+    },
+    {
+      "id": "parker",
+      "name": "Parker",
+      "options": {
+        "look_preset": "parker"
+      }
+    },
+    {
+      "id": "noumenon",
+      "name": "Noumenon",
+      "options": {
+        "look_preset": "noumenon"
+      }
+    }
+  ]
+}

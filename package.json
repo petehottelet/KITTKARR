@@ -1,0 +1,35 @@
+{
+  "name": "kittkarr",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "description": "A local KITT-inspired voice interface for Mac browsers and USB-tethered Car Thing.",
+  "workspaces": [
+    "dashboard-v1/apps/device-ui",
+    "dashboard-v1/packages/contracts"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "start": "node scripts/start.mjs",
+    "check": "node scripts/check.mjs",
+    "test": "npm run test:unit && npm run test:dashboard",
+    "test:browser": "node tests/browser.cjs",
+    "device:build": "node scripts/build-device-v1.mjs",
+    "device:dashboard": "npm run build -w @carthing/device-ui",
+    "device:start": "node assistant/kitt-server-v1.mjs",
+    "device:test": "node --test tests/assistant-v1.test.mjs tests/responses-v1.test.mjs tests/local-wake-v1.test.mjs tests/mac-input-v1.test.mjs tests/microphone-v1.test.mjs tests/wake-health-v1.test.mjs tests/speech-queue.test.cjs tests/traffic-v1.test.mjs tests/yautja-camera-v1.test.mjs tests/device-bridge-v1.test.mjs tests/yautja-viewer-v1.test.mjs",
+    "device:install": "node scripts/install-device-v1.mjs",
+    "setup": "node scripts/setup.mjs",
+    "preview": "node server.mjs",
+    "device:restore": "node scripts/restore-device-v1.mjs",
+    "test:unit": "node --test tests/*.test.cjs tests/*.test.mjs",
+    "test:dashboard": "vitest run tests/lcars-usage-v1.test.ts"
+  },
+  "devDependencies": {
+    "ignore": "^7.0.12",
+    "playwright": "^1.58.0"
+  },
+  "engines": {
+    "node": ">=22.12"
+  }
+}

@@ -1,0 +1,6 @@
+<!-- Revision 1. Original three-column KITT voicebox menu glyph. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 34 34" width="34" height="34">
+  <rect width="34" height="34" rx="5" fill="#000"/>
+  <path fill="#43141a" d="M4 3h7v3H4zm19 0h7v3h-7zM4 28h7v3H4zm19 0h7v3h-7z"/>
+  <path fill="#ff2630" d="M13.5 3h7v3h-7zm0 4.2h7v3h-7zm0 4.2h7v3h-7zm0 4.2h7v3h-7zm0 4.2h7v3h-7zm0 4.2h7v3h-7zm0 4.2h7v3h-7zM4 7.2h7v3H4zm0 4.2h7v3H4zm0 4.2h7v3H4zm0 4.2h7v3H4zm0 4.2h7v3H4zM23 7.2h7v3h-7zm0 4.2h7v3h-7zm0 4.2h7v3h-7zm0 4.2h7v3h-7zm0 4.2h7v3h-7z"/>
+</svg>

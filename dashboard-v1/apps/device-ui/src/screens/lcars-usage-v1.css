@@ -1,0 +1,18 @@
+/* Revision 2. Keep the 44px mode bank above the frame with an 8px black gutter. */
+.lcars-usage>svg{display:block;width:100%;height:100%}
+.lcars-usage{font-family:Antonio,sans-serif;animation:lcars-usage-enter 180ms ease-out both}
+.lcars-mode-bank{position:absolute;left:8.25%;right:5%;bottom:6.25%;height:44px;display:flex}
+.lcars-usage-codex .lcars-mode-bank{left:3%;right:7.5%}
+.lcars-mode-bank button{flex:1;min-width:0;min-height:44px;border:0;border-radius:0;padding:0 8px;margin:0 3px 0 0;background:#cc99cc;color:#000;font:17px Antonio,sans-serif;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.lcars-mode-bank button:first-child{border-radius:22px 0 0 22px}
+.lcars-mode-bank button:last-child{margin-right:0;border-radius:0 22px 22px 0}
+.lcars-mode-bank button[aria-current]{background:#ffcc66}
+.lcars-mode-bank button:focus-visible{outline:2px solid #000;outline-offset:-5px}
+.lcars-mode-bank button:active{background:#99ccff}
+.lcars-quota-next{position:absolute;left:8.25%;top:22%;width:49%;height:60%;background:transparent;border:0;border-radius:0;padding:0;cursor:pointer}
+.lcars-usage-codex .lcars-quota-next{left:3%}
+.lcars-quota-next:focus-visible{outline:2px solid #99ccff;outline-offset:3px}
+.lcars-mode[hidden]{display:none}
+.lcars-mode[hidden] *{animation:none!important}
+@keyframes lcars-usage-enter{from{opacity:.55;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){.lcars-usage{animation:none}}

@@ -1,0 +1,4 @@
+# Revision 1. Exact runtime used by the local live-camera integration.
+numpy==2.5.3
+Pillow==12.3.0
+fonttools==4.66.1
