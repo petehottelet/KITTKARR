@@ -1,6 +1,6 @@
 # KITTKARR
 
-A Knight Rider-inspired, audio-reactive voice interface for a Mac browser or a USB-connected Car Thing. Includes the LED voicebox visualizer, configurable speech and UI. Plugin any cloud or local voice service (e.g. voicebox or kokoro)
+A Knight Rider-inspired, audio-reactive agent voice interface for a Mac browser or a USB-connected Car Thing. Includes the LED voicebox visualizer, configurable speech and UI. Plugin any cloud or local voice service (e.g. voicebox or kokoro)
 
 ## Start on a Mac
 
