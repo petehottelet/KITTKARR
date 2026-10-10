@@ -1,7 +1,7 @@
 <p align="left">
   <picture>
     <source media="(prefers-reduced-motion: reduce)" srcset="assets/branding/voicebox-still.png">
-    <img src="assets/branding/voicebox.gif" width="20%" align="middle" alt="Animated red LED voicebox">
+    <img src="assets/branding/voicebox.gif" width="17%" align="middle" alt="Animated red LED voicebox">
   </picture>
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/branding/title-dark.svg">
