@@ -17,7 +17,8 @@
     const now=hostNow();
     const wake=Boolean(state.wake?.active)&&now-(state.wake?.input?.updatedAt||0)<2500;
     const recording=state.phase==='listening'&&state.listenMode==='manual'&&now-(state.micUpdatedAt||0)<2500;
-    const on=connected&&visible&&!document.hidden&&Boolean(state.device?.connected)&&Boolean(state.wake?.screenActive)&&(wake||recording);
+    const captureReady=state.headless?.enabled?!state.headless.paused:Boolean(state.device?.connected)&&Boolean(state.wake?.screenActive);
+    const on=connected&&visible&&!document.hidden&&captureReady&&(wake||recording);
     const label=on?(state.phase==='listening'?'Recording your request':'Listening for KITT or computer'):!state.wake?.enabled?'Listening off':!['idle','error','connecting'].includes(state.phase)?'Busy; press to listen':state.wake?.error?'Retry listening':'Starting listening';
     listeningLight.disabled=!connected||!visible||document.hidden||listeningPending||typeof state.wake?.enabled!=='boolean';
     listeningLight.setAttribute('aria-pressed',String(on));listeningLight.setAttribute('aria-label','P4: '+label);listeningLight.title=label;
@@ -101,7 +102,7 @@
     if(!visible||document.hidden){hideMicWave();previous=now;lastBrainFrame=0;requestAnimationFrame(animate);return}
     drawMicWave(now);
     const elapsed=signal.speechPosition(activeSpeech,serverTime,serverReceivedAt,now);
-    const playing=connected&&(state.phase==='speaking'||state.phase==='thinking'&&activeSpeech?.kind==='acknowledgment')&&state.audio?.speech==='voice service'&&activeSpeech&&elapsed>=0&&elapsed<activeSpeech.durationMs;
+    const playing=connected&&(state.phase==='speaking'||state.phase==='thinking'&&activeSpeech?.kind==='acknowledgment')&&activeSpeech&&elapsed>=0&&elapsed<activeSpeech.durationMs;
     const rms=playing?signal.speechAmplitude(activeSpeech,elapsed):0;
     const nextLevel=playing?signal.smoothSpeechLevel(level,signal.amplitudeToLevel(rms,1.2),Math.min((now-previous)/1000,.1)):0;
     previous=now;if(nextLevel!==level){level=nextLevel;paint(level)}
@@ -114,7 +115,8 @@
     const value=await response.json();if(!response.ok)throw new Error(value.error||'The Mac could not complete that request.');return value;
   }
   function error(message){$('status').textContent=message;$('status').classList.add('error');$('listen-state').textContent=message;$('listen-state').title=message}
-  function details(open){document.body.classList.toggle('details-open',open);$('details-toggle').setAttribute('aria-expanded',String(open));$('details-toggle').textContent=open?'Voicebox':'Details'}
+  function details(open){document.body.classList.toggle('details-open',open);$('details-toggle').setAttribute('aria-expanded',String(open));$('details-toggle').textContent=open?'Voicebox':'Details';if(!open)setSettingsOpen(false)}
+  function setSettingsOpen(open){$('settings').hidden=!open;document.body.classList.toggle('settings-open',open);$('settings-toggle').setAttribute('aria-expanded',String(open));if(open){$('reminder-panel').hidden=true;if(connected&&state.sidePulse?.enabled&&!state.sidePulse.health)void hardwareAction('check');}$('conversation-body').hidden=open;}
   function stop(){return action('cancel').catch(e=>error(e.message))}
   async function talk(){if(!connected||!visible||document.hidden||pending)return;if(!['idle','error','listening','speaking'].includes(state.phase))return;pending=true;try{details(false);await action('wake',{clientId:wakeClient,active:true});if(state.phase==='listening')await action('listen/stop');else await action('listen/start')}catch(e){error(e.message)}finally{pending=false}}
   let replySignature=null;
@@ -126,18 +128,66 @@
     element.append(document.createTextNode(text.slice(from)));
   }
   let connectionsSignature='';
+  let hardwarePending=false,hardwareError='';
+  function renderHardware(){
+    const leds=state.sidePulse||{},carThing=state.hardware?.carThing??state.device?.mode!=='browser';
+    $('hardware-summary').textContent=carThing?(leds.enabled?'Car Thing + SidePulse':'Car Thing'):(leds.enabled?'Mac + SidePulse':'Mac browser');
+    $('sidepulse-check').disabled=!connected||hardwarePending||!leds.enabled;
+    $('sidepulse-test').disabled=!connected||hardwarePending||!leds.enabled||!['idle','error'].includes(state.phase)||state.headless?.paused||leds.testing;
+    $('sidepulse-test').textContent=leds.testing?'Testing LEDs…':'Test LEDs';
+    if(!hardwarePending)$('sidepulse-status').textContent=hardwareError||(!connected?'Reconnect to KITT to check hardware.':!leds.enabled?'SidePulse is off. You can add it without changing your voice settings.':leds.testing?'Look for a red sweep. The preceding LED display returns afterward.':leds.error||leds.health?.message||'Check the connection, or test the SidePulse LEDs.');
+  }
+  async function hardwareAction(name){
+    if(hardwarePending||!connected)return;
+    hardwarePending=true;hardwareError='';renderHardware();$('sidepulse-status').textContent=name==='test'?'Checking and testing LEDs…':'Checking the SidePulse connection…';
+    try{await action('sidepulse/'+name)}catch(e){hardwareError=e.message}finally{hardwarePending=false;renderHardware()}
+  }
+  $('sidepulse-check').addEventListener('click',()=>void hardwareAction('check'));
+  $('sidepulse-test').addEventListener('click',()=>void hardwareAction('test'));
+  let effectsDirty=false,effectsPending=false,effectsSignature='';
+  function renderEffects(){
+    const config=state.effects,fieldset=$('voice-effects');if(!fieldset)return;
+    fieldset.disabled=!connected||!config||effectsPending;
+    $('effects-apply').disabled=fieldset.disabled;
+    if(!config||effectsDirty)return;
+    const signature=JSON.stringify(config);if(signature===effectsSignature)return;effectsSignature=signature;
+    for(const [id,items,value] of [['effects-filter',config.filters,config.filter],['effects-space',config.spaces,config.space],['effects-robot',config.robotStyles,config.robotStyle]]){
+      const select=$(id);select.replaceChildren();for(const item of items){const option=document.createElement('option');option.value=item.id;option.textContent=item.label;select.append(option)}select.value=value;
+    }
+    $('effects-enabled').checked=config.enabled;$('effects-mix').value=config.wetMix;$('effects-gain').value=config.outputGain;
+    effectsLabels();$('effects-status').textContent='Settings saved for this voice.';
+  }
+  function effectsLabels(){
+    $('effects-mix-value').textContent=Math.round(Number($('effects-mix').value)*100)+'%';
+    $('effects-gain-value').textContent=Math.round(Number($('effects-gain').value)*100)+'%';
+    $('effects-robot').disabled=$('effects-filter').value!=='robot';
+  }
+  for(const id of ['effects-enabled','effects-filter','effects-space','effects-robot','effects-mix','effects-gain'])$(id).addEventListener('input',()=>{effectsDirty=true;effectsLabels();$('effects-status').textContent='Changes not applied.'});
+  $('effects-apply').addEventListener('click',async()=>{
+    if(effectsPending||!connected)return;
+    const settings={enabled:$('effects-enabled').checked,filter:$('effects-filter').value,space:$('effects-space').value,robotStyle:$('effects-robot').value,wetMix:Number($('effects-mix').value),outputGain:Number($('effects-gain').value)};
+    effectsPending=true;renderEffects();$('effects-status').textContent='Saving effects…';
+    try{await action('effects',settings);effectsDirty=false;effectsSignature='';state.effects={...state.effects,...settings};renderEffects()}
+    catch(e){$('effects-status').textContent=e.message+' Try Apply effects again.'}
+    finally{effectsPending=false;$('voice-effects').disabled=!connected;$('effects-apply').disabled=!connected;}
+  });
   function render(next){
     const old=state;state=next;serverTime=next.serverTime;serverReceivedAt=performance.now();activeSpeech=next.speech||null;
+    renderEffects();renderHardware();
     if(['speaking','thinking'].includes(old.phase)&&old.phase===next.phase&&activeSpeech&&old.speech?.id===activeSpeech.id&&old.reply===next.reply&&old.status===next.status&&old.volume===next.volume&&old.persona?.michaelMode===next.persona?.michaelMode&&old.device?.connected===next.device?.connected){renderThinking();return;}
     if(next.phase!=='speaking')speechStarted=false;else if(activeSpeech?.kind!=='acknowledgment'&&activeSpeech)speechStarted=true;
-    if((!(next.phase==='speaking'||next.phase==='thinking'&&activeSpeech?.kind==='acknowledgment')||next.audio?.speech!=='voice service'||!activeSpeech)&&level!==0){level=0;paint(0)}
+    if((!(next.phase==='speaking'||next.phase==='thinking'&&activeSpeech?.kind==='acknowledgment')||!activeSpeech)&&level!==0){level=0;paint(0)}
     renderThinking();
     renderListeningLight();
     renderPersona();
     const busy=!['idle','error'].includes(next.phase);const listening=next.phase==='listening';
-    $('connection').textContent=next.device?.connected?'Car Thing connected':'Waiting for Car Thing USB';$('connection-light').classList.toggle('connected',Boolean(next.device?.connected));
+    $('sound-test').disabled=!connected||busy;$('sound-stop').disabled=!connected||!busy;
+    const carThing=next.hardware?.carThing??next.device?.mode!=='browser';
+    $('connection').textContent=(carThing?(next.device?.connected?'Car Thing connected':'Car Thing disconnected'):'Mac connected')+(next.sidePulse?.enabled?' · SidePulse':'');$('connection-light').classList.toggle('connected',Boolean(next.device?.connected));
+    $('control-hint').textContent=carThing?'Press the dial to talk · press again to finish':'Select the voicebox to talk · select again to finish';
     renderReply(next.replyMarkdown||next.reply||`Ready when you are, ${next.persona?.addressAs||'Driver'}.`);$('heard').hidden=!next.heard;$('heard').textContent=next.heard||'';$('status').textContent=next.status||'';$('status').classList.toggle('error',next.phase==='error');
-    $('talk').disabled=!connected||!next.device?.connected||['thinking','transcribing','starting'].includes(next.phase);$('talk').classList.toggle('listening',listening);$('talk').querySelector('span').textContent=listening?'Finish speaking':next.phase==='speaking'?'Interrupt & talk':'Talk to K.I.T.T.';
+    const canCapture=next.headless?.enabled?!next.headless.paused:Boolean(next.device?.connected);
+    $('talk').disabled=!connected||!canCapture||['thinking','transcribing','starting'].includes(next.phase);$('talk').classList.toggle('listening',listening);$('talk').querySelector('span').textContent=listening?'Finish speaking':next.phase==='speaking'?'Interrupt & talk':'Talk to K.I.T.T.';
     $('cancel').disabled=!busy;$('quick-stop').hidden=!busy;
     $('listen-state').disabled=$('talk').disabled;$('listen-state').classList.toggle('listening',listening);
     const labels={idle:next.wake?.active?'Say KITT or computer':'Press the front button, dial, or voicebox to talk',starting:'Opening microphone…',listening:next.listenMode==='wake'?'Listening · pause to finish':'Listening · press front button to finish',transcribing:'Recognizing your voice…',thinking:next.status||'Thinking…',speaking:'Speaking · press front button to interrupt',error:next.status||'Try again'};
@@ -149,14 +199,14 @@
     }
     $('sources').replaceChildren();for(const source of next.links||[]){if(!/^https:\/\//.test(source.url))continue;const a=document.createElement('a');a.href=source.url;a.textContent=source.label;a.target='_blank';a.rel='noopener noreferrer';$('sources').append(a)}
     renderReminders(next.reminders||[]);
-    if(next.reminderAlert&&next.reminderAlert!==reminderId){reminderId=next.reminderAlert;parentMessage({type:'kitt-reminder'});details(true);$('settings').hidden=true;$('reminder-panel').hidden=false;$('conversation-body').hidden=true}
+    if(next.reminderAlert&&next.reminderAlert!==reminderId){reminderId=next.reminderAlert;parentMessage({type:'kitt-reminder'});details(true);setSettingsOpen(false);$('reminder-panel').hidden=false;$('conversation-body').hidden=true}
   }
   let reminderSignature='';
   function renderReminders(items){$('reminder-count').textContent=String(items.length);const signature=JSON.stringify(items);if(signature===reminderSignature)return;reminderSignature=signature;$('reminder-list').replaceChildren();if(!items.length){const p=document.createElement('p');p.textContent='Ask K.I.T.T. to remind you about something at a specific time.';$('reminder-list').append(p)}
     for(const r of items){const item=document.createElement('div');item.className='reminder-item';const p=document.createElement('p');p.textContent=r.text;const time=document.createElement('time');time.dateTime=r.dueAt;time.textContent=new Date(r.dueAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});const dismiss=document.createElement('button');dismiss.textContent='Dismiss';dismiss.addEventListener('click',()=>void action('reminders/dismiss',{id:r.id}).catch(e=>error(e.message)));item.append(p,time,dismiss);$('reminder-list').append(item)}
   }
   let events=null,reconnectTimer=null,lastEventAt=Date.now(),leaving=false;
-  function disconnected(){connected=false;activeSpeech=null;level=0;paint(0);renderThinking();renderListeningLight();renderPersona();$('talk').disabled=true;$('listen-state').disabled=true;$('connection').textContent='Mac disconnected';$('connection-light').classList.remove('connected');error('Reconnecting to Mac…')}
+  function disconnected(){connected=false;activeSpeech=null;level=0;paint(0);renderThinking();renderListeningLight();renderPersona();renderEffects();renderHardware();$('talk').disabled=true;$('listen-state').disabled=true;$('connection').textContent='Mac disconnected';$('connection-light').classList.remove('connected');error('Reconnecting to Mac…')}
   function connectEvents(){
     clearTimeout(reconnectTimer);if(leaving)return;
     events?.close();lastEventAt=Date.now();
@@ -193,15 +243,16 @@
   $('talk').addEventListener('click',()=>void talk());$('listen-state').addEventListener('click',()=>void talk());$('cancel').addEventListener('click',()=>void stop());$('quick-stop').addEventListener('click',()=>void stop());
   $('details-toggle').addEventListener('click',()=>details(!document.body.classList.contains('details-open')));
   function navigate(page){void stop();if(embedded)parentMessage({type:'kitt-navigate',page});else details(false)}$('back-to-dashboard').addEventListener('click',()=>navigate('overview'));
-  $('settings-toggle').addEventListener('click',()=>{const open=$('settings').hidden;$('settings').hidden=!open;$('reminder-panel').hidden=true;$('conversation-body').hidden=open;$('settings-toggle').setAttribute('aria-expanded',String(open))});
-  $('reminders-toggle').addEventListener('click',()=>{const open=$('reminder-panel').hidden;$('reminder-panel').hidden=!open;$('settings').hidden=true;$('conversation-body').hidden=open;$('reminders-toggle').setAttribute('aria-expanded',String(open))});
+  $('settings-toggle').addEventListener('click',()=>setSettingsOpen($('settings').hidden));
+  $('reminders-toggle').addEventListener('click',()=>{const open=$('reminder-panel').hidden;$('reminder-panel').hidden=!open;setSettingsOpen(false);$('conversation-body').hidden=open;$('reminders-toggle').setAttribute('aria-expanded',String(open))});
   $('host-volume').addEventListener('input',()=>{$('volume-label').textContent=`${Math.round(Number($('host-volume').value)*100)}%`});$('host-volume').addEventListener('change',()=>void action('volume',{volume:Number($('host-volume').value)}).catch(e=>error(e.message)));
   $('sound-test').addEventListener('click',()=>void action('voice-test').catch(e=>error(e.message)));
-  $('follow-ups').addEventListener('click',()=>{details(true);$('settings').hidden=true;$('reminder-panel').hidden=true;$('conversation-body').hidden=false;void action('ask',{text:'Review recent Gmail and Slack conversations plus my upcoming Google Calendar commitments. What are the three most important work follow-ups needing my attention? Use Drive for context only when relevant. Cite the sources, be specific about who and the next step, and do not send messages or create reminders yet.'}).catch(e=>error(e.message))});
+  $('sound-stop').addEventListener('click',()=>void stop());
+  $('follow-ups').addEventListener('click',()=>{details(true);setSettingsOpen(false);$('reminder-panel').hidden=true;$('conversation-body').hidden=false;void action('ask',{text:'Review recent Gmail and Slack conversations plus my upcoming Google Calendar commitments. What are the three most important work follow-ups needing my attention? Use Drive for context only when relevant. Cite the sources, be specific about who and the next step, and do not send messages or create reminders yet.'}).catch(e=>error(e.message))});
   $('text-form').addEventListener('submit',event=>{event.preventDefault();const text=$('text-input').value.trim();if(!text)return;details(true);void action('ask',{text}).then(()=>{$('text-input').value=''}).catch(e=>error(e.message))});
   let lastWheel=0;function volumeDelta(delta){void action('volume',{volume:Math.max(0,Math.min(1,state.volume+delta*.05))}).catch(e=>error(e.message))}
   window.addEventListener('wheel',event=>{if(!event.deltaX)return;event.preventDefault();if(Date.now()-lastWheel<80)return;lastWheel=Date.now();volumeDelta(Math.sign(event.deltaX))},{passive:false});
-  window.addEventListener('keydown',event=>{if(/INPUT|TEXTAREA|SELECT/.test(event.target.tagName)&&event.key!=='Escape')return;if(!['Enter',' ','Escape','Backspace','1','2','3','4','ArrowLeft','ArrowRight'].includes(event.key))return;if(event.repeat)return;event.preventDefault();if(['Enter',' ','Escape','Backspace'].includes(event.key))void talk();else if(event.key==='ArrowRight'||event.key==='ArrowLeft')volumeDelta(event.key==='ArrowRight'?1:-1);else if(event.key==='1')navigate('gallery');else if(event.key==='2')navigate('overview');else if(event.key==='3')details(false);else if(event.key==='4')navigate('lcars')});
+  window.addEventListener('keydown',event=>{if(/^(INPUT|TEXTAREA|SELECT|BUTTON|A)$/.test(event.target.tagName)&&event.key!=='Escape')return;if(!['Enter',' ','Escape','Backspace','1','2','3','4','ArrowLeft','ArrowRight'].includes(event.key))return;if(event.repeat)return;event.preventDefault();if(['Enter',' ','Escape','Backspace'].includes(event.key))void talk();else if(event.key==='ArrowRight'||event.key==='ArrowLeft')volumeDelta(event.key==='ArrowRight'?1:-1);else if(event.key==='1')navigate('gallery');else if(event.key==='2')navigate('overview');else if(event.key==='3')details(false);else if(event.key==='4')navigate('lcars')});
   window.addEventListener('message',event=>{if(event.origin!==parentOrigin||event.source!==window.parent)return;if(event.data?.type==='kitt-visible'){parentMessage({type:'kitt-alive'});visible=Boolean(event.data.visible);renewWake();renderListeningLight();if(visible)window.focus()}if(event.data?.type==='kitt-volume')volumeDelta(event.data.delta===1?1:-1);if(event.data?.type==='kitt-talk')void talk()});
   setInterval(renewWake,5000);document.addEventListener('visibilitychange',()=>{renewWake();renderListeningLight()});
   setInterval(renderListeningLight,250);

@@ -73,7 +73,7 @@ test('browser host serves the interface, denies private files, and accepts typed
   try {
     await app.start(); const base=`http://127.0.0.1:${app.port}`;
     assert.equal(app.state().device.mode,'browser'); assert.equal((await fetch(base)).status,200);
-    for(const file of ['/.env','/.git/config','/.kitt-state/private','/package.json','/assistant/chat-assistant.mjs']) assert.equal((await fetch(base+file)).status,404);
+    for(const file of ['/.env','/.git/config','/.kitt-state/private','/package.json','/assistant/chat-assistant.mjs','/00_project_files/example.js','/nested/00_project_files/example.js']) assert.equal((await fetch(base+file)).status,404);
     const result=await fetch(base+'/api/ask',{method:'POST',headers:{Origin:base,'Content-Type':'application/json','X-KITT-Intent':'1'},body:JSON.stringify({text:'Hello'})});
     assert.equal(result.status,200);
     for(let i=0;i<50&&!spoken.length;i++) await new Promise(resolve=>setTimeout(resolve,10));

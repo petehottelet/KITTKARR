@@ -18,6 +18,11 @@ import { MacInputMonitor } from './mac-input-v1.mjs';
 import { randomUUID } from 'node:crypto';
 import {ThinkingTone} from './thinking-tone-v1.mjs';
 import {YautjaCamera} from './yautja-camera-v1.mjs';
+import {SidePulseVoice} from './sidepulse-v1.mjs';
+import {EffectsPreferences, normalizeEffects} from './audio-effects-v1.mjs';
+import {AnswerSpeechStream, SpeechTextQueue} from './answer-stream-v1.mjs';
+import {spokenAnswer} from './spoken-answer-v1.mjs';
+export {spokenAnswer} from './spoken-answer-v1.mjs';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
 try{process.loadEnvFile(path.join(root,'.env'))}catch{}
@@ -48,25 +53,29 @@ export function brainTimeoutMs(env=process.env){
   const value=Number(env.KITT_BRAIN_TIMEOUT_MS);
   return Number.isFinite(value)&&value>0?value:90000;
 }
-export function spokenAnswer(text){
-  const links=[];let spoken=text.replace(/\[([^\]]+)\]\((https:\/\/[^\s)]+)\)/g,(_,label,url)=>{links.push({label,url});return label});
-  spoken=spoken.replace(/https?:\/\/\S+/g,'').replace(/[*_#`]/g,'').replace(/\n[-•]\s*/g,'\n').trim();
-  return {text:spoken,links};
-}
-export async function createKittServer({port=Number(process.env.KITT_PORT||4180),directory=process.env.KITT_STATE_DIR||path.join(root,'.kitt-state'),audio:providedAudio,assistant:providedAssistant,bridge:providedBridge,reminders:providedReminders,wake:providedWake,inputMonitor:providedInputMonitor,thinkingTone:providedThinkingTone,wakeLeaseMs=15000}={}){
+export async function createKittServer({port=Number(process.env.KITT_PORT||4180),directory=process.env.KITT_STATE_DIR||path.join(root,'.kitt-state'),audio:providedAudio,assistant:providedAssistant,bridge:providedBridge,reminders:providedReminders,wake:providedWake,inputMonitor:providedInputMonitor,thinkingTone:providedThinkingTone,sidePulse:providedSidePulse,microphones:providedMicrophones,wakeLeaseMs=15000}={}){
   const mode=providedBridge?'carthing':hostMode();
   process.env.KITT_INPUT_SOURCE ||= mode==='browser'?'mac':'auto';
   await mkdir(directory,{recursive:true,mode:0o700});
   const camera=new YautjaCamera();
+  const sidePulse=providedSidePulse||new SidePulseVoice();
+  let headless=false,headlessPaused=false,headlessChanging=false,ledTestUntil=0;
+  let headlessChanges=Promise.resolve();
   const reminders=providedReminders||new Reminders(directory);await reminders.load();
   const persona=new PersonaPreferences(directory);await persona.load();
   const listeningPreference=new ListeningPreferences(directory);await listeningPreference.load();let listeningChanges=Promise.resolve();
+  const effects=new EffectsPreferences(directory);await effects.load();let effectsChanges=Promise.resolve();let answerQueue=null;
   const clients=new Set();let generation=0;let closed=false;let reminderBusy=false;let turnTiming=null;let thinkingTone=null;
   const wakeClients=new Map();let wakeResumeAt=0;let wakeReconciling=false;let wakeToken=0;let brainWait=null;let openMicFailStreak=0;let openMicSession=false;let openMicSpeechSeen=false;let openMicLastVoice=0;let openMicStartedAt=0;let openMicSilenceTimer=null;
   let state={version:1,persona:persona.snapshot(),phase:'idle',listenMode:null,reply:`Ready when you are, ${persona.snapshot().addressAs}.`,heard:'',status:'Press the front button to talk.',volume:.7,micLevel:0,speech:null,sources:[],audio:{},device:{connected:false},links:[],reminderAlert:null,wake:{enabled:listeningPreference.enabled,available:false,active:false,screenActive:false,words:wakeWords,lastWord:null,error:null}};
   const activeScreen=()=>[...wakeClients.values()].some(expires=>expires>Date.now());
-  const captureAllowed=()=>!closed&&state.device.connected&&activeScreen();
-  const snapshot=()=>({...state,serverTime:Date.now(),reminders:reminders.list()});
+  const captureAllowed=()=>!closed&&!headlessChanging&&(headless?!headlessPaused:state.device.connected&&activeScreen());
+  const snapshot=()=>({...state,hardware:{carThing:mode==='carthing',sidePulse:sidePulse.status().enabled},effects:effects.snapshot(),headless:{enabled:headless,paused:headless&&headlessPaused},sidePulse:{...sidePulse.status(),testing:Date.now()<ledTestUntil},serverTime:Date.now(),reminders:reminders.list()});
+  const syncSidePulse=()=>sidePulse.update(closed||headlessChanging||headlessPaused?null:state.speech,{
+    hold:!closed&&headless,
+    idle:!closed&&!headlessChanging&&!headlessPaused&&(Date.now()<ledTestUntil||captureAllowed()&&state.phase==='idle'&&state.wake.active),
+    thinking:!closed&&!headlessChanging&&!headlessPaused&&(headless||activeScreen())&&['thinking','transcribing'].includes(state.phase)
+  });
   const publish=()=>{const message=`data: ${JSON.stringify(snapshot())}\n\n`;for(const response of [...clients]){try{if(response.writableEnded||response.destroyed||response.writableLength>1024*1024){clients.delete(response);response.destroy?.();continue;}response.write(message)}catch{clients.delete(response)}}};
   const update=patch=>{
     if(Object.hasOwn(patch,'reply')&&!Object.hasOwn(patch,'replyMarkdown'))patch.replyMarkdown=null;
@@ -88,13 +97,14 @@ export async function createKittServer({port=Number(process.env.KITT_PORT||4180)
         turnTiming.finishedAt=now;patch.recentTurns=[...(state.recentTurns||[]),{...turnTiming,recordingMs:turnTiming.transcribingAt?turnTiming.transcribingAt-turnTiming.startedAt:null,transcriptionMs:turnTiming.thinkingAt&&turnTiming.transcribingAt?turnTiming.thinkingAt-turnTiming.transcribingAt:null,answerMs:turnTiming.speakingAt&&turnTiming.thinkingAt?turnTiming.speakingAt-turnTiming.thinkingAt:null,outcome:patch.phase}].slice(-6);turnTiming=null;
       }
     }
-    state={...state,...patch,diagnostics:events.slice(-30)};thinkingTone?.setActive(state.phase==='thinking'&&!state.acknowledging&&!state.speech&&captureAllowed(),state.volume);publish();
+    state={...state,...patch,diagnostics:events.slice(-30)};thinkingTone?.setActive(state.phase==='thinking'&&!state.acknowledging&&!state.speech&&captureAllowed(),state.volume);void syncSidePulse();publish();
   };
   thinkingTone=providedThinkingTone||(!providedAudio?new ThinkingTone({directory:path.join(directory,'audio')}):null);
-  const microphones=!providedAudio&&!providedWake?new MicrophoneRouter({onChange:event=>{
+  const microphones=providedMicrophones||(!providedAudio&&!providedWake?new MicrophoneRouter({onChange:event=>{
     const selected=event.type==='selected';
     update({audio:{...state.audio,microphone:event.route?.name||'No working microphone',microphoneSource:event.route?.source||'auto',microphonePermission:'managed',microphoneAvailable:selected,microphoneFallback:!!event.fallback,microphoneHealth:event.type},wake:{...state.wake,input:null},...(['idle','error','starting'].includes(state.phase)?{status:selected?`Using ${event.route.name}. Say KITT or computer.`:event.type==='selecting'?`Checking ${event.route.name}…`:event.error||'Checking microphone fallback…'}:{})});
-  }}):null;
+  }}):null);
+  const screenInputMode=microphones?.mode;
   const clearOpenMicSilence=()=>{if(openMicSilenceTimer){clearTimeout(openMicSilenceTimer);openMicSilenceTimer=null}};
   const noteOpenMicLevel=micLevel=>{
     update({micLevel,micUpdatedAt:Date.now()});
@@ -116,7 +126,7 @@ export async function createKittServer({port=Number(process.env.KITT_PORT||4180)
       if(state.phase==='listening'&&state.listenMode!=='wake'&&openMicSpeechSeen)void finishListening();
     },wait);
   };
-  const audio=providedAudio||new AudioEngine({directory:path.join(directory,'audio'),serial:process.env.KITT_ADB_SERIAL||'',microphones,onLevel:noteOpenMicLevel,onLimit:()=>void finishListening(),onPlayback:speech=>update({speech})});
+  const audio=providedAudio||new AudioEngine({directory:path.join(directory,'audio'),serial:process.env.KITT_ADB_SERIAL||'',microphones,effects:()=>effects.config(),onLevel:noteOpenMicLevel,onLimit:()=>void finishListening(),onPlayback:speech=>update({speech})});
   await audio.initialize();state.audio=await audio.check();state.acknowledgments=audio.acknowledgments?.status();
   const assistant=providedAssistant||new (brainMode()==='chat'?ChatAssistant:brainMode()==='responses'?ResponsesAssistant:WorkAssistant)({reminders,cwd:directory,onStatus:status=>update({status})});
   update({assistant:{provider:brainMode()==='chat'?'Configured chat service':brainMode()==='responses'?'OpenAI Responses API':brainMode()==='codex'?'OpenAI/Codex':'Grok Bot bridge',model:brainMode()!=='grokbot'?assistant.model||null:null,effort:brainMode()!=='grokbot'?assistant.effort||'low':null}});
@@ -125,6 +135,7 @@ export async function createKittServer({port=Number(process.env.KITT_PORT||4180)
     update({device});
     if(wasConnected&&!device?.connected){
       camera.reset();
+      if(headless)return;
       openMicSession=false;openMicFailStreak=0;openMicSpeechSeen=false;clearOpenMicSilence();
       if(!['idle','error'].includes(state.phase))void cancel();
       return;
@@ -217,7 +228,7 @@ export async function createKittServer({port=Number(process.env.KITT_PORT||4180)
     if(token!==generation)return;
     openMicSession=false;openMicFailStreak=0;
     const ready=captureAllowed()&&state.wake.enabled&&state.wake.available;
-    const status=!activeScreen()?'Open KITT mode to listen.':!state.wake.enabled?'Wake listening is off. Press P4 to listen.':!state.wake.available?'Wake-word listening needs setup. Press the front button to talk.':'Say KITT or computer, then talk. Pause when you are done.';
+    const status=headlessPaused?'Headless paused.':!headless&&!activeScreen()?'Open KITT mode to listen.':!state.wake.enabled?'Wake listening is off. Press P4 to listen.':!state.wake.available?'Wake-word listening needs setup. Press the front button to talk.':'Say KITT or computer, then talk. Pause when you are done.';
     wakeResumeAt=Date.now()+120;
     update({phase:'idle',listenMode:null,status});
     // Never fall back to ungated automatic recording if wake detection is unavailable.
@@ -236,6 +247,9 @@ export async function createKittServer({port=Number(process.env.KITT_PORT||4180)
         if(acknowledgment)acknowledgment=Promise.resolve(acknowledgment).catch(()=>{}).finally(()=>{if(token===generation)update({acknowledging:false})});
         else update({acknowledging:false});
       }
+      if(assistant.supportsStreaming&&audio.speakStream&&process.env.KITT_STREAM_REPLIES!=='0'){
+        await streamAnswer(text,token,acknowledgment);return;
+      }
       const raw=await assistant.ask(text,{michaelMode:persona.michaelMode});if(token!==generation)return;
       const answer=spokenAnswer(raw);update({reply:answer.text,replyMarkdown:raw,links:answer.links,sources:assistant.sources,answerSource:assistant.lastUsage?.model||assistant.model||null});
       await speak(answer.text,token,{beforePlayback:acknowledgment});
@@ -249,6 +263,27 @@ export async function createKittServer({port=Number(process.env.KITT_PORT||4180)
       update({reply:retryText,replyMarkdown:null,links:[]});
       try{await speak(retryText,token)}catch(playbackError){fail(playbackError,token)}
     }
+  }
+  async function streamAnswer(text,token,acknowledgment){
+    const queue=new SpeechTextQueue();answerQueue=queue;
+    const phrases=new AnswerSpeechStream(phrase=>queue.push(phrase));
+    let playbackError;
+    const playback=Promise.resolve().then(()=>audio.speakStream(queue,{beforePlayback:acknowledgment,onStart:()=>{
+      if(token===generation)update({phase:'speaking',listenMode:null,status:'Speaking through your Mac.'});
+    }})).catch(error=>{playbackError=error;queue.cancel(error);void assistant.cancel()});
+    try{
+      const raw=await assistant.ask(text,{michaelMode:persona.michaelMode,onText:value=>{
+        if(token!==generation)throw Error('Request stopped.');
+        phrases.update(value);
+      }});
+      if(token!==generation)return;
+      const answer=spokenAnswer(raw),spoken=assistant.lastSpokenAnswer??answer.text;
+      phrases.update(spoken,{final:true});queue.close();
+      update({reply:answer.text,replyMarkdown:raw,links:answer.links,sources:assistant.sources,answerSource:assistant.lastUsage?.model||assistant.model||null});
+      await playback;if(playbackError)throw playbackError;
+      if(token===generation)await maybeOpenMicListen(token);
+    }catch(error){queue.cancel(error);if(token===generation)audio.stopPlayback();throw error}
+    finally{queue.close();await playback;if(answerQueue===queue)answerQueue=null;}
   }
   async function askGrokBot(text,token){
     update({phase:'thinking',heard:text,status:'Checking with Grok Bot…',speech:null,links:[]});
@@ -307,6 +342,8 @@ export async function createKittServer({port=Number(process.env.KITT_PORT||4180)
     return askGrokBot(text,token);
   }
   async function cancel(){
+    ledTestUntil=0;
+    answerQueue?.cancel();answerQueue=null;
     generation++;wakeResumeAt=Date.now()+1500;openMicSession=false;openMicFailStreak=0;openMicSpeechSeen=false;openMicLastVoice=0;openMicStartedAt=0;clearOpenMicSilence();
     clearBrainWait(new Error('stopped'));
     audio.cancelTranscription?.();audio.stopPlayback();await Promise.all([wake.stop(),audio.stopCapture(true).catch(()=>{}),assistant.cancel()]);
@@ -314,8 +351,10 @@ export async function createKittServer({port=Number(process.env.KITT_PORT||4180)
   }
   function setListeningEnabled(enabled,{interrupt=true}={}){
     if(typeof enabled!=='boolean')return Promise.reject(new Error('Listening must be true or false.'));
+    if(headless)return interrupt?setHeadless({enabled:true,paused:!enabled}):Promise.resolve();
     const change=listeningChanges.then(async()=>{
       if(closed)return;
+      if(headless||headlessChanging)return;
       if(enabled&&!activeScreen())throw new Error('Open KITT mode before enabling the microphone.');
       if(enabled&&!state.device.connected)throw new Error('Connect the Car Thing to the Mac over USB.');
       if(enabled&&interrupt&&!state.wake.available)throw new Error('Wake-word listening needs setup before P4 can turn on.');
@@ -334,8 +373,7 @@ export async function createKittServer({port=Number(process.env.KITT_PORT||4180)
     });listeningChanges=change.catch(()=>{});return change;
   }
   async function startListening({openMic=false}={}){
-    if(!activeScreen())throw new Error('Open KITT mode before using the microphone.');
-    if(!state.device.connected)throw new Error('Connect the Car Thing to the Mac over USB.');
+    if(!captureAllowed())throw new Error(headless?'Resume headless mode before using the microphone.':'Open KITT mode on the connected host before using the microphone.');
     if(!state.audio.transcription)throw new Error('Voice input needs setup. Check the OpenAI key or local transcription configuration on the Mac.');
     if(!microphones&&state.audio.microphonePermission==='denied')throw new Error('Allow KITT microphone access in macOS Privacy & Security settings, then restart KITT.');
     if(!microphones&&state.audio.microphoneAvailable===false)throw new Error('Select a microphone in macOS Sound settings.');
@@ -384,6 +422,33 @@ export async function createKittServer({port=Number(process.env.KITT_PORT||4180)
     reminderBusy=true;
     try{const due=await reminders.claimDue();if(!due.length)return;const token=++generation;const text=`${persona.snapshot().addressAs}, ${due.map(r=>r.text).join('. ')}`;update({reply:text,heard:'',reminderAlert:due[0].id,links:due.filter(r=>r.sourceUrl).map(r=>({label:'Reminder source',url:r.sourceUrl}))});await speak(text,token)}catch(error){fail(error)}finally{reminderBusy=false}
   }
+  function setHeadless(body){
+    if(typeof body.enabled!=='boolean'||(body.paused!==undefined&&typeof body.paused!=='boolean')||(!body.enabled&&body.paused))return Promise.reject(new Error('Use a boolean enabled value and pause only an enabled session.'));
+    const change=headlessChanges.then(async()=>{
+      if(closed)return;
+      const enabled=body.enabled,paused=enabled&&Boolean(body.paused);
+      if(headless===enabled&&headlessPaused===paused)return;
+      headlessChanging=true;
+      // Revoke capture before awaiting cancellation, including a pending wake start.
+      try{
+        await cancel();
+        await listeningChanges;
+        if(closed)return;
+        headless=enabled;headlessPaused=paused;
+        if(microphones)microphones.mode=headless?'mac':screenInputMode;
+        wakeResumeAt=0;
+        update({wake:{...state.wake,enabled:headless?!paused:listeningPreference.enabled,active:false,input:null,error:null},status:paused?'Headless paused.':enabled?'Headless ready. Say KITT or computer.':'Headless stopped.'});
+      }catch(error){
+        headlessPaused=headless;
+        update({wake:{...state.wake,enabled:false,active:false},status:'Headless controls could not finish. Try stopping again.'});
+        throw error;
+      }finally{headlessChanging=false;}
+      void syncSidePulse();
+      void reconcileWake();
+    });
+    headlessChanges=change.catch(()=>{});
+    return change;
+  }
   const publicFiles=new Map([['/assets/yautja-wordmark-v1.svg','assets/yautja-wordmark-v1.svg'],['/yautja','yautja-v1.html'],['/yautja-v1.js','yautja-v1.js'],['/yautja-v1.css','yautja-v1.css'],['/','device-v1.html'],['/device-v1.js','device-v1.js'],['/device-v1.css','device-v1.css'],['/styles.css','styles.css'],['/signal.js','signal.js'],['/assets/fonts/michroma.ttf','assets/fonts/michroma.ttf'],['/assets/icon.png','assets/icon.png']]);
   const mime={'.png':'image/png','.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.ttf':'font/ttf','.svg':'image/svg+xml'};
   const json=(response,status,value)=>{response.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});response.end(JSON.stringify(value))};
@@ -406,11 +471,30 @@ export async function createKittServer({port=Number(process.env.KITT_PORT||4180)
         let bytes=0;const chunks=[];for await(const chunk of request){bytes+=chunk.length;if(bytes>16384){json(response,413,{error:'Keep the request shorter.'});return}chunks.push(chunk)}
         let body;try{body=JSON.parse(Buffer.concat(chunks).toString())}catch{json(response,400,{error:'The request could not be read.'});return;}
         if(!body||typeof body!=='object'||Array.isArray(body))throw new Error('Send a JSON object.');
-        if(url.pathname==='/api/yautja/session'){
+        if(url.pathname==='/api/sidepulse/check'){
+          if(!sidePulse.check)throw Error('LED diagnostics are unavailable.');
+          await sidePulse.check();publish();
+        }
+        else if(url.pathname==='/api/sidepulse/test'){
+          const available=()=>!closed&&!headlessChanging&&!headlessPaused&&['idle','error'].includes(state.phase);
+          if(!available())throw Error('Stop the current request or resume the paused session before testing LEDs.');
+          if(!sidePulse.status().enabled)throw Error('Choose SidePulse or both in npm run setup, then restart KITT.');
+          const health=await sidePulse.check?.();
+          if(!health?.ready)throw Error(health?.message||'Run npm run doctor to check SidePulse.');
+          if(!available())throw Error('A request started. Stop it before testing LEDs.');
+          ledTestUntil=Date.now()+1800;void syncSidePulse();publish();
+        }
+        else if(url.pathname==='/api/headless')await setHeadless(body);
+        else if(url.pathname==='/api/yautja/session'){
           if(body.active&&!state.device.connected)throw new Error('Connect the Car Thing before opening its camera feed.');
           camera.lease(body.clientId,body.active);
         }
         else if(url.pathname==='/api/yautja/preset'){json(response,200,camera.advance(body.clientId,body.delta));return;}
+        else if(url.pathname==='/api/effects'){
+          normalizeEffects(body);
+          const change=effectsChanges.then(async()=>{if(closed)return;await cancel();await effects.set(body);update({});});
+          effectsChanges=change.catch(()=>{});await change;
+        }
         else if(url.pathname==='/api/listening')await setListeningEnabled(body.enabled);
         else if(url.pathname==='/api/persona')update({persona:await persona.setMichaelMode(body.michaelMode)});
         else if(url.pathname==='/api/listen/start')await startListening();
@@ -479,8 +563,31 @@ export async function createKittServer({port=Number(process.env.KITT_PORT||4180)
   });
   const heartbeat=setInterval(publish,2000);
   const remindersTimer=setInterval(()=>void deliverReminders(),1000);
-  const wakeTimer=setInterval(()=>void reconcileWake(),250);
-  return {server,get port(){return port},state:snapshot,async start(){await inputMonitor?.start();await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,'127.0.0.1',resolve)});port=server.address().port;bridge.start();void assistant.initialize().then(sources=>update({sources})).catch(error=>update({status:`Work connection: ${error.message}`}));if(process.env.KITT_WARM_VOICE_CACHE==='1'&&audio.warmAcknowledgments)void audio.warmAcknowledgments().then(()=>{if(!closed)update({acknowledgments:audio.acknowledgments.status()})}).catch(()=>{if(!closed)update({acknowledgments:{...audio.acknowledgments.status(),error:'Some acknowledgment clips are unavailable; replies still work.'}})});return this;},async close(){closed=true;camera.close();generation++;thinkingTone?.stop();clearBrainWait(new Error('stopped'));inputMonitor?.stop();clearInterval(heartbeat);clearInterval(remindersTimer);clearInterval(wakeTimer);bridge.stop();for(const response of clients)response.end();clients.clear();assistant.close();await wake.stop();await listeningChanges;await audio.close();await new Promise(resolve=>server.close(resolve));}};
+  const wakeTimer=setInterval(()=>{void syncSidePulse();void reconcileWake()},100);
+  async function closeServer(){
+    if(closed)return;
+    closed=true;generation++;clearOpenMicSilence();
+    answerQueue?.cancel();answerQueue=null;
+    clearInterval(heartbeat);clearInterval(remindersTimer);clearInterval(wakeTimer);
+    let failure;
+    const attempt=async action=>{try{await action()}catch(error){failure||=error}};
+    await attempt(()=>camera.close());
+    await attempt(()=>thinkingTone?.stop());
+    clearBrainWait(new Error('stopped'));
+    await attempt(()=>inputMonitor?.stop());
+    await attempt(()=>bridge.stop());
+    for(const response of clients)response.end();clients.clear();
+    await attempt(()=>assistant.close());
+    await attempt(()=>audio.stopPlayback?.());
+    await attempt(()=>wake.stop());
+    await headlessChanges;await listeningChanges;await effectsChanges;
+    // LED release and HTTP shutdown must still run if audio teardown fails.
+    await attempt(()=>sidePulse.update(null));
+    await attempt(()=>audio.close());
+    await attempt(()=>new Promise(resolve=>server.close(resolve)));
+    if(failure)throw failure;
+  }
+  return {server,get port(){return port},state:snapshot,async start(){await inputMonitor?.start();await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,'127.0.0.1',resolve)});port=server.address().port;bridge.start();void assistant.initialize().then(sources=>update({sources})).catch(error=>update({status:`Work connection: ${error.message}`}));if(process.env.KITT_WARM_VOICE_CACHE==='1'&&audio.warmAcknowledgments)void audio.warmAcknowledgments().then(()=>{if(!closed)update({acknowledgments:audio.acknowledgments.status()})}).catch(()=>{if(!closed)update({acknowledgments:{...audio.acknowledgments.status(),error:'Some acknowledgment clips are unavailable; replies still work.'}})});return this;},close:closeServer};
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   const app=await createKittServer();await app.start();console.log(`K.I.T.T. host v2 is ready at http://127.0.0.1:${app.port}`);

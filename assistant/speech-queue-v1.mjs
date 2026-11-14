@@ -1,6 +1,6 @@
 // Revision 1. Small first speech section with one section of bounded look-ahead.
 export function speechChunks(text) {
-  let remaining=text.trim().slice(0,1000);const chunks=[];
+  let remaining=text.trim().slice(0,16000);const chunks=[];
   const segmenter=new Intl.Segmenter('en',{granularity:'sentence'});
   while(remaining){
     const limit=chunks.length?350:200;
@@ -16,6 +16,38 @@ export function speechChunks(text) {
     chunks.push(remaining.slice(0,end).trim());remaining=remaining.slice(end).trim();
   }
   return chunks;
+}
+
+export async function playSpeechStream(chunks, {prepare, play, signal, abort}) {
+  const iterator = chunks[Symbol.asyncIterator]?.() || chunks[Symbol.iterator]();
+  const jobs = new Set();
+  const next = () => {
+    const job = (async () => {
+      signal.throwIfAborted();
+      let onAbort;
+      const interrupted = new Promise((_, reject) => { onAbort = () => reject(signal.reason || Error('Speech stopped.')); signal.addEventListener('abort', onAbort, {once: true}); });
+      let item;
+      try { item = await Promise.race([iterator.next(), interrupted]); }
+      finally { signal.removeEventListener('abort', onAbort); }
+      signal.throwIfAborted();
+      return item.done ? {done: true} : {value: await prepare(item.value)};
+    })().catch(error => ({error}));
+    jobs.add(job); job.finally(() => jobs.delete(job)); return job;
+  };
+  let current = next(), upcoming = next();
+  try {
+    while (true) {
+      const result = await current; signal.throwIfAborted();
+      if (result.error) throw result.error;
+      if (result.done) break;
+      await play(result.value); signal.throwIfAborted();
+      current = upcoming; upcoming = next();
+    }
+  } finally {
+    abort();
+    void Promise.resolve(iterator.return?.()).catch(() => {});
+    await Promise.allSettled(jobs);
+  }
 }
 
 export async function playSpeechQueue(chunks,{prepare,play,signal,abort}) {

@@ -1,6 +1,6 @@
 import {readdir} from 'node:fs/promises';
 import {spawnSync} from 'node:child_process';
-const excluded = new Set(['.git','node_modules','.kitt-state','dist','output','.venv']);
+const excluded = new Set(['.git','node_modules','.kitt-state','dist','output','.venv','00_project_files']);
 async function walk(dir) {
   for (const item of await readdir(dir,{withFileTypes:true})) {
     if (excluded.has(item.name)) continue;

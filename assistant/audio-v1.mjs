@@ -10,7 +10,8 @@ import { randomUUID } from 'node:crypto';
 import { speechConfig, streamSpeech } from '../speech.mjs';
 import { transcriptionConfig, transcribeWithOpenAI } from './openai-transcription-v1.mjs';
 import { AcknowledgmentCache } from './acknowledgments-v1.mjs';
-import { speechChunks, playSpeechQueue } from './speech-queue-v1.mjs';
+import { speechChunks, playSpeechQueue, playSpeechStream } from './speech-queue-v1.mjs';
+import {DEFAULT_EFFECTS, processPCM16} from './audio-effects-v1.mjs';
 import { microphoneSource, macCaptureArgs } from './mac-input-v1.mjs';
 const run=promisify(execFile);
 export const sampleRate=16000;
@@ -39,7 +40,8 @@ export function beepPcm(index) {
 }
 
 export class AudioEngine {
-  constructor({directory,serial='',spawnProcess=spawn,microphones,onLevel=()=>{},onLimit=()=>{},onPlayback=()=>{}}) {
+  constructor({directory,serial='',spawnProcess=spawn,microphones,onLevel=()=>{},onLimit=()=>{},onPlayback=()=>{},effects=()=>DEFAULT_EFFECTS}) {
+    this.effects=effects;
     this.spawnProcess=spawnProcess;this.directory=directory;this.serial=serial;this.microphones=microphones;this.onLevel=onLevel;this.onLimit=onLimit;this.onPlayback=onPlayback;this.player=path.join(path.dirname(directory),'mac-player-v1');this.nativePlayer=false;
     this.adb=process.env.KITT_ADB||'adb';this.whisper=process.env.KITT_WHISPER||'whisper-cli';this.model=process.env.KITT_WHISPER_MODEL||path.join(os.homedir(),'.cache/whisper/ggml-large-v3-turbo.bin');this.ffmpeg=process.env.KITT_FFMPEG||'ffmpeg';this.volume=.7;this.capture=null;this.playback=null;this.beep=null;this.generation=0;
   }
@@ -51,17 +53,28 @@ export class AudioEngine {
     this.cacheController??=new AbortController();
     return this.acknowledgments.warm((text,file,signal)=>this.prepareVoiceClip(text,file,signal),{signal:this.cacheController.signal});
   }
-  async prepareVoiceClip(text,file,signal){
+  async prepareVoiceClip(text,file,signal,effects=DEFAULT_EFFECTS){
     const encoded=`${file}.mp3`,raw=`${file}.pcm`;
     try{
       const stream=await streamSpeech(text,{signal});await writeFile(encoded,Buffer.from(await new Response(stream).arrayBuffer()),{mode:0o600});signal?.throwIfAborted();
       await run(this.ffmpeg,['-v','error','-i',encoded,'-ar','16000','-ac','1','-f','s16le',raw],{timeout:20000,signal});
-      const pcm=await readFile(raw);signal?.throwIfAborted();await writeFile(file,pcmToWav(pcm),{mode:0o600});return envelope(pcm);
+      const pcm=processPCM16(await readFile(raw),effects);signal?.throwIfAborted();await writeFile(file,pcmToWav(pcm),{mode:0o600});return envelope(pcm);
     }finally{await Promise.all([rm(encoded,{force:true}),rm(raw,{force:true})])}
   }
   acknowledge(persona){
     const clip=this.acknowledgments?.take(persona);if(!clip)return null;
-    this.stopPlayback();return this.playPrepared(clip,this.generation);
+    this.stopPlayback();const generation=this.generation,effects=this.effects();
+    if(!effects.enabled)return this.playPrepared(clip,generation);
+    return this.playEffectedAcknowledgment(clip,generation,effects);
+  }
+  async playEffectedAcknowledgment(clip,generation,effects){
+    const file=path.join(this.directory,`ack-effects-${randomUUID()}.wav`);
+    try{
+      const pcm=processPCM16((await readFile(clip.file)).subarray(44),effects);
+      if(generation!==this.generation)return;
+      await writeFile(file,pcmToWav(pcm),{mode:0o600});
+      await this.playPrepared({...clip,file,waveform:envelope(pcm)},generation);
+    }finally{await rm(file,{force:true})}
   }
   async check(){
     const checkFile=async (file,mode)=>{try{await access(file,mode);return true}catch{return false}};
@@ -187,17 +200,18 @@ export class AudioEngine {
   }
   cancelTranscription(){this.transcriptionController?.abort();this.transcriptionController=null;}
   stopPlayback(){this.generation++;this.speechController?.abort();this.speechController=null;this.playback?.kill();this.playback=null;this.onPlayback(null);}
-  async speak(text,{beforePlayback}={}) {
+  async speak(text,options={}) { return this.speakSections(process.env.KITT_SPEECH_CHUNKING==='0'&&text.length<=1000?[text]:speechChunks(text),options); }
+  async speakStream(chunks,options={}) { return this.speakSections(chunks,{...options,streaming:true}); }
+  async speakSections(chunks,{beforePlayback,onStart=()=>{},streaming=false}={}) {
     // A cached acknowledgment may already be playing. Prepare the answer now, but gate its audio.
     if(!beforePlayback)this.stopPlayback();const generation=this.generation;const controller=new AbortController();this.speechController=controller;
-    const useService=speechConfig().available;const files=[];
-    const chunks=useService&&process.env.KITT_SPEECH_CHUNKING!=='0'?speechChunks(text):[text.slice(0,1000)];
+    const useService=speechConfig().available;const files=[];const effects=this.effects();let started=false;
     try {
-      await playSpeechQueue(chunks,{
+      await (streaming?playSpeechStream:playSpeechQueue)(chunks,{
         signal:controller.signal,abort:()=>controller.abort(),
         prepare:async section=>{
           const id=randomUUID(),base=path.join(this.directory,`reply-${id}`),playFile=`${base}.wav`;files.push(playFile);
-          if(useService)return {id,file:playFile,waveform:await this.prepareVoiceClip(section,playFile,controller.signal)};
+          if(useService)return {id,file:playFile,waveform:await this.prepareVoiceClip(section,playFile,controller.signal,effects)};
           const file=`${base}.aiff`,raw=`${base}.pcm`;files.push(file,raw);
           {
             await new Promise((resolve,reject)=>{
@@ -208,10 +222,10 @@ export class AudioEngine {
           }
           controller.signal.throwIfAborted();
           await run(this.ffmpeg,['-v','error','-i',file,'-ar','16000','-ac','1','-f','s16le',raw],{timeout:20000,signal:controller.signal});
-          const pcm=await readFile(raw);await writeFile(playFile,pcmToWav(pcm),{mode:0o600});
+          const pcm=processPCM16(await readFile(raw),effects);await writeFile(playFile,pcmToWav(pcm),{mode:0o600});
           return {id,file:playFile,waveform:envelope(pcm)};
         },
-        play:async clip=>{await beforePlayback;if(generation===this.generation)await this.playPrepared(clip,generation)}
+        play:async clip=>{await beforePlayback;if(generation===this.generation){if(!started){started=true;onStart()}await this.playPrepared(clip,generation)}}
       });
     }catch(error){if(generation===this.generation)throw error;}
     finally{if(this.speechController===controller)this.speechController=null;await Promise.all(files.map(file=>rm(file,{force:true})));}

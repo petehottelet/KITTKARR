@@ -10,7 +10,16 @@
   </picture>
 </p>
 
-A Knight Rider-inspired, audio-reactive agent voice interface for a browser or a USB-connected Spotify Car Thing. Includes the LED voicebox visualizer, configurable speech and UI. Plugin any cloud or local voice service (e.g. voicebox or kokoro). 
+<p align="center">
+  <a href="LICENSE"><img alt="Code license: MIT" src="https://img.shields.io/badge/code%20license-MIT-green.svg"></a>
+  <a href="package.json"><img alt="Node.js 22.12+" src="https://img.shields.io/badge/Node.js-22.12%2B-339933.svg"></a>
+  <a href="docs/SETUP.md"><img alt="Run locally on macOS" src="https://img.shields.io/badge/macOS-local-555555.svg"></a>
+  <a href="docs/CARTHING.md"><img alt="Spotify Car Thing: USB" src="https://img.shields.io/badge/Car%20Thing-USB-2da44e.svg"></a>
+  <a href="docs/VOICE.md"><img alt="Voice services: cloud or local" src="https://img.shields.io/badge/voice-cloud%20%2B%20local-orange.svg"></a>
+  <a href="https://kittkarr.com"><img alt="Website: KITTKARR.com" src="https://img.shields.io/badge/web-KITTKARR.com-ef4444.svg"></a>
+</p>
+
+A Knight Rider-inspired, audio-reactive voice interface for **Car Thing, SidePulse Pro, or both together**, hosted on your Mac. A Mac browser works on its own too. Includes the LED voicebox visualizer, configurable speech and UI. Connect a compatible cloud or local voice service.
 
 ## Start on a Mac
 
@@ -22,9 +31,15 @@ npm run setup
 npm start
 ```
 
-Choose **Mac browser**, then open **http://127.0.0.1:4180**. The default uses the Mac system voice. No paid voice account is required. For the standalone audio panel, use `npm run preview` and open **http://127.0.0.1:4173**.
+Setup asks which hardware you want, checks its prerequisites, and offers installation at login. It preserves existing voice and account settings. `npm start` opens **http://127.0.0.1:4180**, reusing an installed/running host when available.
 
-- [Mac setup, conversation, and microphone input](docs/SETUP.md)
+Open **Details → Settings** and choose **Test voice** or **Test LEDs**. The default Mac voice and LED test need no AI account. Both outputs follow the same reply when Car Thing and SidePulse are selected together. Run `npm run doctor` for connection help, or rerun setup to change hardware.
+
+Car Thing requires compatible ClaudeThing firmware and its Mac collector. SidePulse requires one **SidePulse Pro in mounted-drive mode** and its [official companion](https://github.com/inteliwear/sidepulse#installation). The assistant host runs on macOS; SidePulse Dot is not currently supported.
+
+For the standalone audio panel, use `npm run preview` and open **http://127.0.0.1:4173**.
+
+- [Hardware setup, first voice/LED test, and microphone input](docs/SETUP.md)
 - [USB Car Thing installation and restore](docs/CARTHING.md)
 - [Cloud and local voice providers](docs/VOICE.md), including Kokoro-compatible endpoints and adapters for other services
 - [Optional integrations](docs/OPTIONAL.md)

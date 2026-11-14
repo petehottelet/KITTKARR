@@ -1,5 +1,5 @@
 // Revision 2. Restore dashboard contents and verify browser readiness; retain private user state.
-import { readFile, cp, rm } from 'node:fs/promises';
+import { readFile, cp, rm, rename } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
@@ -23,4 +23,7 @@ try {
   if(error.code!=='ENOENT')throw error;
   await rm(manifest.agent,{force:true});
 }
-console.log('Restored the original application dashboard. Reminders and backups were retained.');
+try{await cp(path.join(manifest.backup,'previous-host-service.json'),path.join(root,'.kitt-state/host-service.json'))}
+catch(error){if(error.code!=='ENOENT')throw error;await rm(path.join(root,'.kitt-state/host-service.json'),{force:true})}
+await rename(path.join(root,'.kitt-state/install-v1.json'),path.join(manifest.backup,'restored-install-v1.json'));
+console.log('Restored the original application dashboard. Reminders and backups were retained. Run setup to change your remaining hardware.');

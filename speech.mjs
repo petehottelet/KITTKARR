@@ -5,15 +5,16 @@ export class SpeechError extends Error {
 }
 export function speechConfig(env = process.env) {
   const provider = (env.TTS_PROVIDER || 'system').trim();
-  if (!['system', 'openai-compatible', 'http'].includes(provider)) throw new SpeechError(500, 'Choose system, openai-compatible, or http for TTS_PROVIDER.');
-  const endpoint = (env.TTS_ENDPOINT || '').trim();
+  if (!['system', 'local', 'openai-compatible', 'http'].includes(provider)) throw new SpeechError(500, 'Choose system, local, openai-compatible, or http for TTS_PROVIDER.');
+  const endpoint = (env.TTS_ENDPOINT || (provider === 'local' ? 'http://127.0.0.1:4181/v1/audio/speech' : '')).trim();
   if (endpoint) {
     let url;
     try { url = new URL(endpoint); } catch { throw new SpeechError(500, 'TTS_ENDPOINT must be an absolute URL.'); }
     if (url.username || url.password || url.search || url.hash || !['http:', 'https:'].includes(url.protocol)) throw new SpeechError(500, 'Use a speech endpoint without credentials, query parameters, or fragments.');
     if (url.protocol !== 'https:' && !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) throw new SpeechError(500, 'Remote speech endpoints require HTTPS.');
+    if (provider === 'local' && !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) throw new SpeechError(500, 'The local voice engine requires a loopback endpoint.');
   }
-  return {provider, endpoint, apiKey: (env.TTS_API_KEY || '').trim(), voiceId: (env.TTS_VOICE || '').trim(), modelId: (env.TTS_MODEL || '').trim(), available: provider !== 'system' && Boolean(endpoint)};
+  return {provider, endpoint, apiKey: provider === 'local' ? '' : (env.TTS_API_KEY || '').trim(), voiceId: (env.TTS_VOICE || (provider === 'local' ? 'local' : '')).trim(), modelId: (env.TTS_MODEL || (provider === 'local' ? 'qwen-local' : '')).trim(), available: provider !== 'system' && Boolean(endpoint)};
 }
 export function voiceSettings(env = process.env) {
   let settings;
@@ -31,14 +32,15 @@ export async function providerError(response) {
   return new SpeechError(response.status === 429 ? 503 : 502,
     [401, 403].includes(response.status) ? 'The voice service rejected its credentials.' : 'The voice service could not generate speech.');
 }
-export async function streamSpeech(text, {env = process.env, fetch = globalThis.fetch, timeout = 55000, signal} = {}) {
+export async function streamSpeech(text, {env = process.env, fetch = globalThis.fetch, timeout, signal} = {}) {
   const config = speechConfig(env), input = validateText(text);
   if (!config.available) throw new SpeechError(503, 'Configure TTS_PROVIDER and TTS_ENDPOINT to use an HTTP voice service.');
   const options = voiceSettings(env);
-  const body = config.provider === 'openai-compatible'
-    ? {...options, input, ...(config.modelId ? {model: config.modelId} : {}), ...(config.voiceId ? {voice: config.voiceId} : {}), response_format: 'mp3'}
+  const body = ['openai-compatible', 'local'].includes(config.provider)
+    ? {...(config.provider === 'local' ? {} : options), input, ...(config.modelId ? {model: config.modelId} : {}), ...(config.voiceId ? {voice: config.voiceId} : {}), response_format: config.provider === 'local' ? 'wav' : 'mp3'}
     : {...options, text: input, ...(config.modelId ? {model: config.modelId} : {}), ...(config.voiceId ? {voice: config.voiceId} : {})};
   let response;
+  timeout ??= config.provider === 'local' ? 180000 : 55000;
   try {
     response = await fetch(config.endpoint, {
       method: 'POST', redirect: 'error',

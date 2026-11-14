@@ -11,7 +11,7 @@ test('speech sections preserve the bounded reply, amounts, and sentence boundari
  assert.equal(chunks[0],'Your first update is ready for you, Driver.');
  assert.equal(chunks.join(' '),text);assert(chunks.slice(1).every(s=>s.length<=350));
  assert.equal(speechChunks('Hello.').join(''),'Hello.');assert.deepEqual(speechChunks('   '),[]);
- assert.equal(speechChunks('x'.repeat(1500)).join('').length,1000);
+ assert.equal(speechChunks('x'.repeat(1500)).join('').length,1500,'long answers are not silently cut off at the old per-request limit');
 });
 
 test('first section plays before the later generation completes, without reordering',async()=>{

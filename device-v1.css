@@ -50,6 +50,18 @@ body.device-view{background:#000;color:#efeeeb;margin:0;min-width:320px}
 .settings h2,.reminder-panel h2{font-size:18px;font-weight:500;margin:0 0 10px}
 .settings label{display:flex;justify-content:space-between;margin-top:12px}
 .settings p{color:#b7b6bb;font-size:12px;line-height:1.5;margin:8px 0 12px}
+.voice-effects{margin:24px 0 8px;padding:16px 0 0;border:0;border-top:1px solid #454247;min-width:0}
+.voice-effects legend{font-size:17px;padding:0 12px 0 0}
+.effects-options{display:grid;grid-template-columns:112px minmax(0,1fr);align-items:center;gap:8px 16px}
+.effects-options label{margin:0}
+.voice-effects select{min-height:44px;width:100%;padding:8px;background:#1b191c;color:#efeeeb;border:1px solid #555055;border-radius:4px;font:inherit;color-scheme:dark}
+.voice-effects .effects-enable{align-items:center;min-height:44px;margin:0 0 8px}
+.voice-effects input[type=checkbox]{width:22px;height:22px;accent-color:#de685b}
+.voice-effects input[type=range]{width:100%;min-height:36px;accent-color:#de685b}
+.voice-effects button{margin-top:12px}
+.voice-effects select:disabled{opacity:.55}
+.voice-effects select:focus-visible,.voice-effects input:focus-visible,.voice-effects button:focus-visible{outline:2px solid #ffc46c;outline-offset:3px}
+.voice-effects output{font-variant-numeric:tabular-nums}
 .connection-detail{display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-bottom:1px solid #302c2e}
 .connection-detail span:last-child{color:#ffcc8b}
 .reminder-item{border-bottom:1px solid #302c2e;padding:10px 0}
@@ -87,9 +99,9 @@ button:focus-visible,input:focus-visible,.conversation-body:focus-visible{outlin
   body:not(.details-open) .listening-strip{left:auto;right:8px;top:50%;bottom:auto;width:104px;min-height:0;flex-direction:column;gap:4px;transform:translateY(-50%);background:transparent}
   body:not(.details-open) .listening-strip button{max-width:100%;padding:10px 4px;line-height:1.5}
 }
-.device-view:not(.details-open) .device-tools,
 .device-view:not(.details-open) .listening-strip,
 .device-view:not(.details-open) .text-form{display:none}
+.device-view:not(.details-open) #back-to-dashboard{visibility:hidden}
 .thinking-brain{position:fixed;right:12px;bottom:10px;width:104px;height:92px;pointer-events:none;contain:strict;z-index:4}
 .thinking-brain canvas{display:block;width:100%;height:100%}
 .details-open .thinking-brain{display:none}
@@ -101,3 +113,21 @@ button:focus-visible,input:focus-visible,.conversation-body:focus-visible{outlin
 .mic-waveform canvas{display:block;width:100%;height:100%}
 .details-open .mic-waveform{display:none}
 @media(max-width:699px){.mic-waveform{left:8px;bottom:8px;width:64px;height:36px}}
+.settings-open .quick-actions,.settings-open .voice-actions,.settings-open .control-hint,.settings-open .text-form,.settings-open .listening-strip{display:none}
+.settings-open .device-stage{height:100dvh;min-height:0;max-height:none;padding-bottom:12px}
+.settings-open .conversation{height:100%;padding-bottom:0}
+.settings{display:flex;flex-direction:column;overflow:hidden;padding-right:0}
+.settings-scroll{flex:1;min-height:0;overflow-y:auto;padding-right:8px;scrollbar-color:#555055 #070708}
+.settings-actions{flex-shrink:0;padding-top:12px;border-top:1px solid #454247}
+.settings-buttons{display:flex;gap:8px}
+.settings-buttons button{flex:1;min-width:0;padding:8px;font-size:12px}
+.settings-actions p{min-height:18px;margin:8px 0 0}
+.device-view button:focus-visible,.device-view select:focus-visible,.device-view input:focus-visible,.device-view .voice-window:focus-visible{outline:2px solid #ffc46c;outline-offset:3px}
+.hardware-settings{padding-bottom:18px;margin-bottom:22px;border-bottom:1px solid #454247}
+.hardware-settings h2{margin-top:0}
+.hardware-buttons{display:flex;gap:8px;margin:14px 0}
+.hardware-buttons button{flex:1;min-width:0;min-height:44px;padding:10px;font-size:13px}
+.hardware-help{line-height:1.6}
+.hardware-help a{color:#ffc46c;text-underline-offset:3px}
+.hardware-help code{font-size:inherit;overflow-wrap:anywhere}
+#sidepulse-status{min-height:2.8em;line-height:1.4}

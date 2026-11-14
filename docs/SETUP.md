@@ -1,11 +1,27 @@
-# Mac browser setup
+# Car Thing, SidePulse, or both
 
 1. Install Node.js 22.12 or later and FFmpeg. With Homebrew: `brew install node ffmpeg`.
 2. Download this repository, open Terminal in its directory, and run `npm ci`.
-3. Run `npm run setup` and choose **Mac browser**. It creates an ignored, private `.env` and preserves an existing one.
-4. Run `npm start` and open **http://127.0.0.1:4180** in a browser. Keep Terminal running. Stop with Control-C.
+3. Run `npm run setup`. Choose **Car Thing**, **SidePulse**, **both**, or **Mac browser only**. Setup creates or updates the private `.env`, changing hardware settings while retaining voice, model, account settings and comments.
+4. Follow any prerequisite messages. SidePulse needs the [official companion](https://github.com/inteliwear/sidepulse#installation) with output enabled and one mounted SidePulse Pro. Car Thing needs compatible ClaudeThing firmware, ADB authorization and its existing Mac collector; see [CARTHING.md](CARTHING.md). Selecting both enables the two outputs in one host.
+5. Setup offers to install/start KITT at login. This requires Apple command-line tools (`xcode-select --install`); it builds the microphone-permission and audio-clock helpers on your Mac. For Car Thing it also builds and backs up the dashboard before installing. You can skip installation and run `npm start` in Terminal instead.
+6. Run `npm start` to open **http://127.0.0.1:4180**. An existing compatible host is reused; an installed stopped service is started. A foreground host stays attached to Terminal until Control-C. `KITT_OPEN_BROWSER=0` disables automatic browser opening.
 
-No Car Thing, native app installation, or cloud account is needed for the display, typed clock questions, and **Settings → Test voice**. Sound comes from the Mac's selected output. The server listens only on loopback; it is not a public web service.
+Open **Details → Settings**. **Test voice** uses the selected voice (Mac system voice by default). **Test LEDs** runs a short red sweep and restores the preceding SidePulse display. Both work before configuring conversation or microphone transcription; the LED test never requests speech. Type “What time is it?” to try a complete local spoken answer. Sound comes from the Mac's selected output; Car Thing and SidePulse visualize the same reply. The server listens only on loopback.
+
+## Hardware checks and changes
+
+`npm run doctor` checks only the hardware you selected and explains missing dependencies. **Check connection** in Settings distinguishes a stopped SidePulse service, disabled output, missing drive, multiple Pro devices and unsupported devices. `npm run leds:test` works with the running host or, if the host is stopped, directly through the companion service.
+
+Rerun `npm run setup` to add/remove either output. Existing chat, voice and transcription settings are retained. Restart the host to apply changes: rerun `npm run host:install` for a login service, or stop the foreground host and run `npm start`. Setup can apply changes to an already-installed dashboard without replacing its original backup. For noninteractive configuration use `npm run setup -- --hardware sidepulse --no-install`; accepted choices are `carthing`, `sidepulse`, `both`, and `browser`.
+
+SidePulse-only use needs no Car Thing, ADB, collector, or display window. For voice listening without a window, configure transcription and optional wake models below, then use `npm run headless -- run`. Headless sessions always use a Mac microphone, including when both devices are attached. Pause and stop are described in [OPTIONAL.md](OPTIONAL.md).
+
+## Run at login
+
+`npm run host:install` installs or updates this checkout's Mac service for any hardware choice. It retains a preceding service configuration and refuses to replace a service owned by another checkout. Keep the project in its permanent folder; rerun installation after moving it or changing Node. Stop a foreground host before installing the service.
+
+`npm run host:uninstall` removes a standalone login service and restores a preceding service if one was saved. Private configuration, models and recordings remain. If the Car Thing dashboard is installed, run `npm run device:restore` first. The service starts the host; wake listening without a screen still requires an explicit headless session. The optional local Qwen service is started separately with `npm run voice:local`.
 
 ## Conversation
 
@@ -42,5 +58,6 @@ Wake-word listening is optional and needs additional local models. The supplied 
 - No input: check microphone permission and the selected input, then restart Terminal/the host.
 - Cannot transcribe: verify the local model/executable, or the cloud key and model. No cloud fallback occurs automatically.
 - Cannot generate speech: check [voice settings](VOICE.md), confirm the chosen service is running, and restart.
-- Port occupied: stop the other host. Device/dashboard integrations currently use port 4180; retain that port for Car Thing.
+- Port occupied: `npm start` reuses a compatible host. If it reports an older host or changed hardware, restart that host first. Device/dashboard integrations currently use port 4180; retain that port for Car Thing.
+- LEDs dark: use **Details → Settings → Check connection**, or `npm run doctor`. Confirm SidePulse companion output is enabled. Test LEDs independently of the voice service. Sleep/wake behavior and drive availability also depend on the companion's settings.
 - Local state, reminders, audio caches, and backups live in ignored `.kitt-state/`. Never share that directory or `.env`.

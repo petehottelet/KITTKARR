@@ -1,3 +1,4 @@
+# Private reference material, including nested folders.
 00_project_files/
 .env
 .env.*
@@ -36,6 +37,7 @@ dashboard-v1/apps/device-ui/dist/
 __pycache__/
 *.pyc
 .venv/
+.venv*/
 *.zip
 *.tgz
 .DS_Store

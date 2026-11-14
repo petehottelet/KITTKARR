@@ -21,9 +21,34 @@ const html = `<!doctype html>
       <div id="sources" class="sources"></div>
     </div>
     <section id="settings" class="settings" hidden aria-label="Connections and sound">
+      <div class="settings-scroll">
+      <section class="hardware-settings" aria-labelledby="hardware-title">
+        <h2 id="hardware-title">Your hardware</h2>
+        <p id="hardware-summary">Waiting for hardware settings…</p>
+        <p id="sidepulse-status" role="status" aria-live="polite">Checking SidePulse settings…</p>
+        <div class="hardware-buttons"><button id="sidepulse-check" class="secondary-control" type="button" disabled>Check connection</button><button id="sidepulse-test" class="secondary-control" type="button" disabled>Test LEDs</button></div>
+        <p class="hardware-help">To add or change hardware, run <code>npm run setup</code> on your Mac, then restart KITT. <a href="https://github.com/inteliwear/sidepulse#installation" target="_blank" rel="noopener noreferrer">SidePulse companion setup</a></p>
+      </section>
       <h2>Connections & sound</h2><div id="connection-details"></div>
       <label for="host-volume">Mac reply volume <output id="volume-label">70%</output></label><input id="host-volume" type="range" min="0" max="1" step="0.05" value="0.7">
-      <p>Replies use your Mac’s selected speaker or Bluetooth audio device.</p><button id="sound-test" class="secondary-control">Test voice</button>
+      <p>Replies use your Mac’s selected speaker or Bluetooth audio device.</p>
+      <fieldset id="voice-effects" class="voice-effects" disabled>
+        <legend>Voice effects</legend>
+        <p>Saved for the current voice. Applying changes stops the current reply.</p>
+        <label class="effects-enable"><span>Enable effects</span><input id="effects-enabled" type="checkbox"></label>
+        <div class="effects-options">
+          <label for="effects-filter">Filter</label><select id="effects-filter"></select>
+          <label for="effects-robot">Robot style</label><select id="effects-robot"></select>
+          <label for="effects-space">Room</label><select id="effects-space"></select>
+        </div>
+        <label for="effects-mix">Effect mix <output id="effects-mix-value">100%</output></label><input id="effects-mix" type="range" min="0" max="1" step="0.05" value="1">
+        <label for="effects-gain">Output gain <output id="effects-gain-value">100%</output></label><input id="effects-gain" type="range" min="0" max="1.5" step="0.05" value="1">
+      </fieldset>
+      </div>
+      <div class="settings-actions">
+        <div class="settings-buttons"><button id="effects-apply" class="secondary-control" type="button" disabled>Apply effects</button><button id="sound-test" class="secondary-control" type="button">Test voice</button><button id="sound-stop" class="secondary-control" type="button" disabled>Stop voice</button></div>
+        <p id="effects-status" role="status" aria-live="polite">Waiting for sound settings…</p>
+      </div>
     </section>
     <section id="reminder-panel" class="reminder-panel" hidden aria-label="Reminders"><h2>Reminders</h2><div id="reminder-list"></div></section>
     <div class="quick-actions"><button id="follow-ups">Follow ups</button><button id="reminders-toggle" aria-expanded="false">Reminders <span id="reminder-count">0</span></button></div>
